@@ -101,6 +101,9 @@ Options:
         opts.on('-r', '--rolling', 'generate images from each previous image') do |r|
           @options[:rolling] = true
         end
+        opts.on('-t', '--timeout', 'Timeout for PDF extraction from OpenOffice-supported document format') do |t|
+          @options[:timeout] = t
+        end
         opts.on_tail('-v', '--version', 'display docsplit version') do
           puts "Docsplit version #{Docsplit::VERSION}"
           exit

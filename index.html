@@ -233,6 +233,9 @@ Docsplit.extract_pages('doc.pdf', :pages => 1..10)</pre>
       <b>xls</b> and so on, as well as <b>html</b>, <b>odf</b>, <b>rtf</b>, <b>swf</b>, <b>svg</b>, and <b>wpd</b>.
       The first time that you convert a new file type, LibreOffice will lazy-load
       the code that processes it &mdash; subsequent conversions will be much faster.
+      <br />
+      The <tt>--timeout</tt> flag may be used to set the number of seconds before
+      JODConverter's "error on timeout" exception. Useful when you convert very large documents.
     </p>
 <pre>
 docsplit pdf documentation/*.html</pre>

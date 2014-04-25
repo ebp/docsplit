@@ -112,6 +112,7 @@ module Docsplit
     # Convert documents to PDF.
     def extract(docs, opts)
       out = opts[:output] || '.'
+      timeout = opts[:timeout]
       FileUtils.mkdir_p out unless File.exists?(out)
       [docs].flatten.each do |doc|
         ext = File.extname(doc)
@@ -132,6 +133,7 @@ module Docsplit
             true
           else # open office presumably, rely on JODConverter to figure it out.
             options = "-jar #{ESCAPED_ROOT}/vendor/jodconverter/jodconverter-core-3.0-beta-4.jar -r #{ESCAPED_ROOT}/vendor/conf/document-formats.js"
+            options += "-t #{timeout}" if timeout
             run_jod "#{options} #{escaped_doc} #{escaped_out}/#{escaped_basename}.pdf", [], {}
           end
         end
