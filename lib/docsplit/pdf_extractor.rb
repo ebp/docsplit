@@ -1,4 +1,5 @@
 require 'rbconfig'
+require 'timeout'
 
 module Docsplit
   class PdfExtractor
@@ -120,7 +121,8 @@ module Docsplit
         escaped_doc, escaped_out, escaped_basename = [doc, out, basename].map(&ESCAPE)
 
         if GM_FORMATS.include?(`file -b --mime #{ESCAPE[doc]}`.strip.split(/[:;]\s+/)[0])
-          `gm convert #{escaped_doc} #{escaped_out}/#{escaped_basename}.pdf`
+          cmd = "gm convert #{escaped_doc} #{escaped_out}/#{escaped_basename}.pdf"
+          run_with_timeout(cmd, timeout)
         else
           if libre_office?
             # Set the LibreOffice user profile, so that parallel uses of cloudcrowd don't trip over each other.
@@ -128,13 +130,13 @@ module Docsplit
             
             options = "--headless --invisible  --norestore --nolockcheck --convert-to pdf --outdir #{escaped_out} #{escaped_doc}"
             cmd = "#{office_executable} #{options} 2>&1"
-            result = `#{cmd}`.chomp
-            raise ExtractionFailed, result if $? != 0
+            run_with_timeout(cmd, timeout)
+
             true
           else # open office presumably, rely on JODConverter to figure it out.
             options = "-jar #{ESCAPED_ROOT}/vendor/jodconverter/jodconverter-core-3.0-beta-4.jar -r #{ESCAPED_ROOT}/vendor/conf/document-formats.js"
-            options += "-t #{timeout}" if timeout
-            run_jod "#{options} #{escaped_doc} #{escaped_out}/#{escaped_basename}.pdf", [], {}
+            options += " -t #{timeout}" if timeout
+            run_jod "#{options} #{escaped_doc} #{escaped_out}/#{escaped_basename}.pdf", [], {timeout: timeout}
           end
         end
       end
@@ -150,14 +152,39 @@ module Docsplit
     
     # Runs a Java command, with quieted logging, and the classpath set properly.
     def run_jod(command, pdfs, opts, return_output=false)
-
       pdfs   = [pdfs].flatten.map{|pdf| "\"#{pdf}\""}.join(' ')
       office = osx? ? "-Doffice.home=#{office_path}" : office_path
       cmd    = "java #{HEADLESS} #{LOGGING} #{office} -cp #{CLASSPATH} #{command} #{pdfs} 2>&1"
-      result = `#{cmd}`.chomp
-      raise ExtractionFailed, result if $? != 0
+      result = run_with_timeout(cmd, opts[:timeout])
       return return_output ? (result.empty? ? nil : result) : true
     end
+
+    def run_with_timeout(command, timeout_seconds)
+      IO.pipe do |rout, wout|
+        pid = Process.spawn(command, :out => wout, :err => wout)
+        status = nil
+
+        begin
+          Timeout.timeout(timeout_seconds) do
+            _, status = Process.wait2(pid)
+          end
+        rescue Timeout::Error
+          Process.kill('KILL', pid)
+        end
+
+        wout.close
+        output = rout.readlines.join("\n").chomp
+        rout.close
+
+        if !status || status.exitstatus != 0
+          result = "Unexpected exit code #{status.exitstatus} when running `#{command}`:\n#{output}"
+          raise ExtractionFailed, result
+        end
+
+        return output
+      end
+    end
+
 
     class OfficeNotFound < StandardError; end
   end
