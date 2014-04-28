@@ -160,21 +160,26 @@ module Docsplit
     end
 
     def run_with_timeout(command, timeout_seconds)
+      # Ensures rout and wout are closed at end of block
       IO.pipe do |rout, wout|
-        pid = Process.spawn(command, :out => wout, :err => wout)
+        pid = Process.spawn(command, :out => wout, :err => wout, :pgroup => true)
         status = nil
 
         begin
           Timeout.timeout(timeout_seconds) do
             _, status = Process.wait2(pid)
           end
-        rescue Timeout::Error
-          Process.kill('KILL', pid)
-        end
 
-        wout.close
-        output = rout.readlines.join("\n").chomp
-        rout.close
+          # Can only read when the process isn't timed out and killed
+          wout.close
+          output = rout.readlines.join("\n").chomp
+          rout.close
+        rescue Timeout::Error
+          # Negative PID to kill the entire process process group
+          Process.kill('KILL', -Process.getpgid(pid))
+          # Detach to prevent a zombie process sticking around
+          Process.detach(pid)
+        end
 
         if !status || status.exitstatus != 0
           result = "Unexpected exit code #{status.exitstatus} when running `#{command}`:\n#{output}"
