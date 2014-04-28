@@ -164,16 +164,19 @@ module Docsplit
       IO.pipe do |rout, wout|
         pid = Process.spawn(command, :out => wout, :err => wout, :pgroup => true)
         status = nil
+        output = nil
 
         begin
           Timeout.timeout(timeout_seconds) do
             _, status = Process.wait2(pid)
-          end
 
-          # Can only read when the process isn't timed out and killed
-          wout.close
-          output = rout.readlines.join("\n").chomp
-          rout.close
+            # Can only read when the process isn't timed out and killed.
+            # If the process dies, `rout.readlines` could lock, so it is
+            # included inside the timeout.
+            wout.close
+            output = rout.readlines.join("\n").chomp
+            rout.close
+          end
         rescue Timeout::Error
           # Negative PID to kill the entire process process group
           Process.kill('KILL', -Process.getpgid(pid))
