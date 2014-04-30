@@ -39,7 +39,7 @@ module Docsplit
         end
 
         if !status
-          raise ExtractionFailed,
+          raise ExtractionTimedOut,
             "Timed out after #{timeout_seconds} when running `#{command}`:\n#{output}"
         elsif status.exitstatus != 0
           raise ExtractionFailed,

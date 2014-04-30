@@ -32,6 +32,7 @@ module Docsplit
   # Raise an ExtractionFailed exception when the PDF is encrypted, or otherwise
   # broke.
   class ExtractionFailed < StandardError; end
+  class ExtractionTimedOut < ExtractionFailed; end
 
   # Use the ExtractPages Java class to burst a PDF into single pages.
   def self.extract_pages(pdfs, opts={})
