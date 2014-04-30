@@ -49,7 +49,14 @@ module Docsplit
   def self.extract_images(pdfs, opts={})
     pdfs = ensure_pdfs(pdfs)
     opts[:pages] = normalize_value(opts[:pages]) if opts[:pages]
-    ImageExtractor.new.extract(pdfs, opts)
+
+    if opts[:poppler]
+      extractor = PopplerImageExtractor.new
+    else
+      extractor = ImageExtractor.new
+    end
+
+    extractor.extract(pdfs, opts)
   end
 
   # Use JODCConverter to extract the documents as PDFs.
@@ -95,6 +102,7 @@ end
 
 require "#{Docsplit::ROOT}/lib/docsplit/timeoutable"
 require "#{Docsplit::ROOT}/lib/docsplit/image_extractor"
+require "#{Docsplit::ROOT}/lib/docsplit/poppler_image_extractor"
 require "#{Docsplit::ROOT}/lib/docsplit/transparent_pdfs"
 require "#{Docsplit::ROOT}/lib/docsplit/text_extractor"
 require "#{Docsplit::ROOT}/lib/docsplit/page_extractor"
