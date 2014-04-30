@@ -30,9 +30,12 @@ module Docsplit
           Process.detach(pid)
         end
 
-        if !status || status.exitstatus != 0
-          result = "Unexpected exit code #{status.exitstatus} when running `#{command}`:\n#{output}"
-          raise ExtractionFailed, result
+        if !status
+          raise ExtractionFailed,
+            "Timed out after #{timeout_seconds} when running `#{command}`:\n#{output}"
+        elsif status.exitstatus != 0
+          raise ExtractionFailed,
+            "Unexpected exit code #{status.exitstatus} when running `#{command}`:\n#{output}"
         end
 
         return output
