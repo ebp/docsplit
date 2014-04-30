@@ -5,29 +5,35 @@ module Docsplit
 
     private
 
-    def run_with_timeout(command, timeout_seconds)
-      # Ensures rout and wout are closed at end of block
-      IO.pipe do |rout, wout|
-        pid = Process.spawn(command, :out => wout, :err => wout, :pgroup => true)
+    def run_with_timeout(command, timeout_seconds, options = {})
+      IO.pipe do |rstdout, wstdout|
         status = nil
-        output = nil
+        # In case the buffer fills, keep draining it in another thread
+        output = ''
+        reader_thread = Thread.new do
+          output << rstdout.read.to_s until rstdout.eof?
+        end
+
+        pid = Process.spawn(command,
+                            :in => :close,
+                            :out => wstdout,
+                            :err => [:child, :out],
+                            :pgroup => true)
 
         begin
           Timeout.timeout(timeout_seconds) do
             _, status = Process.wait2(pid)
-
-            # Can only read when the process isn't timed out and killed.
-            # If the process dies, `rout.readlines` could lock, so it is
-            # included inside the timeout.
-            wout.close
-            output = rout.readlines.join("\n").chomp
-            rout.close
           end
         rescue Timeout::Error
           # Negative PID to kill the entire process process group
           Process.kill('KILL', -Process.getpgid(pid))
           # Detach to prevent a zombie process sticking around
           Process.detach(pid)
+        ensure
+          # Close the write end to signal read end EOF
+          wstdout.close
+          # Allow read thread to finish the last of the output
+          reader_thread.join(5) if reader_thread
         end
 
         if !status
