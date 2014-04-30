@@ -5,7 +5,7 @@ module Docsplit
 
     private
 
-    def run_with_timeout(command, timeout_seconds, options = {})
+    def run_with_timeout(command, timeout_seconds, options = {}, &timeout_block)
       IO.pipe do |rstdout, wstdout|
         status = nil
         # In case the buffer fills, keep draining it in another thread
@@ -29,6 +29,8 @@ module Docsplit
           Process.kill('KILL', -Process.getpgid(pid))
           # Detach to prevent a zombie process sticking around
           Process.detach(pid)
+
+          timeout_block.call if timeout_block
         ensure
           # Close the write end to signal read end EOF
           wstdout.close

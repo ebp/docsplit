@@ -7,8 +7,12 @@ module Docsplit
     POPPLER_FORMATS = %w(png jpeg tiff ps eps svg).freeze
 
     def convert(pdf, size, format, previous=nil)
-      format = 'jpeg' if format.to_s == 'jpg'
-      unless POPPLER_FORMATS.include?(format.to_s)
+      poppler_format = case format.to_s
+                       when 'jpg' then 'jpeg'
+                       when 'tif' then 'tiff'
+                       else format.to_s
+                       end
+      unless POPPLER_FORMATS.include?(poppler_format)
         raise ArgumentError, "#{format} is not a supported Poppler format"
       end
 
@@ -20,10 +24,14 @@ module Docsplit
 
       # Output files are: #{out_path}-#{page_number}.#{format}
       out_path = ESCAPE[File.join(directory, basename)]
-      cmd = "#{executable} -#{format} -r #{@density} #{escaped_pdf} #{out_path}"
-      run_with_timeout(cmd, @timeout)
+      cmd = "#{executable} -#{poppler_format} -r #{@density} #{escaped_pdf} #{out_path}"
+      run_with_timeout(cmd, @timeout) do
+        Dir["#{out_path}-*.#{format}"].each do |tmpfile|
+          File.delete(tmpfile)
+        end
+      end
     ensure
-      FileUtils.remove_entry_secure tempdir if File.exists?(tempdir)
+      FileUtils.remove_entry_secure tempdir if tempdir && File.exists?(tempdir)
     end
 
     private

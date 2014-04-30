@@ -120,10 +120,16 @@ module Docsplit
         ext = File.extname(doc)
         basename = File.basename(doc, ext)
         escaped_doc, escaped_out, escaped_basename = [doc, out, basename].map(&ESCAPE)
+        escaped_output_file = "#{escaped_out}/#{escaped_basename}.pdf"
 
         if GM_FORMATS.include?(`file -b --mime #{ESCAPE[doc]}`.strip.split(/[:;]\s+/)[0])
-          cmd = "gm convert #{escaped_doc} #{escaped_out}/#{escaped_basename}.pdf"
-          run_with_timeout(cmd, timeout)
+          cmd = "gm convert #{escaped_doc} #{escaped_output_file}"
+
+          run_with_timeout(cmd, timeout) do
+            if File.exist?(escaped_output_file)
+              File.delete(escaped_output_file)
+            end
+          end
         else
           if libre_office?
             # Set the LibreOffice user profile, so that parallel uses of cloudcrowd don't trip over each other.
@@ -131,7 +137,12 @@ module Docsplit
             
             options = "--headless --invisible  --norestore --nolockcheck --convert-to pdf --outdir #{escaped_out} #{escaped_doc}"
             cmd = "#{office_executable} #{options} 2>&1"
-            run_with_timeout(cmd, timeout)
+
+            run_with_timeout(cmd, timeout) do
+              if File.exist?(escaped_output_file)
+                File.delete(escaped_output_file)
+              end
+            end
 
             true
           else # open office presumably, rely on JODConverter to figure it out.
