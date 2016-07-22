@@ -8,16 +8,21 @@ module Docsplit
     DEFAULT_FORMAT  = :png
     DEFAULT_DENSITY = '150'
 
+    attr_reader :output, :pages, :density, :formats, :sizes, :rolling
+
+    alias_method :rolling?, :rolling
+
     # Extract a list of PDFs as rasterized page images, according to the
     # configuration in options.
     def extract(pdfs, options)
-      @pdfs = [pdfs].flatten
       extract_options(options)
-      @pdfs.each do |pdf|
+      [pdfs].flatten.each do |pdf|
         previous = nil
-        @sizes.each_with_index do |size, i|
-          @formats.each {|format| convert(pdf, size, format, previous) }
-          previous = size if @rolling
+        sizes.each_with_index do |size|
+          formats.each do |format|
+            convert(pdf, size, format, previous)
+          end
+          previous = size if rolling?
         end
       end
     end
@@ -27,7 +32,7 @@ module Docsplit
     # we simply downsample that image, instead of re-rendering the entire PDF.
     # Now we generate one page at a time, a counterintuitive opimization
     # suggested by the GraphicsMagick list, that seems to work quite well.
-    def convert(pdf, size, format, previous=nil)
+    def convert(pdf, size, format, previous = nil)
       tempdir   = Dir.mktmpdir
       basename  = File.basename(pdf, File.extname(pdf))
       directory = directory_for(size)
@@ -35,6 +40,7 @@ module Docsplit
       escaped_pdf = ESCAPE[pdf]
       FileUtils.mkdir_p(directory) unless File.exists?(directory)
       common    = "#{MEMORY_ARGS} -density #{@density} #{resize_arg(size)} #{quality_arg(format)}"
+
       if previous
         FileUtils.cp(Dir[directory_for(previous) + '/*'], directory)
         result = `MAGICK_TMPDIR=#{tempdir} OMP_NUM_THREADS=2 gm mogrify #{common} -unsharp 0x0.5+0.75 \"#{directory}/*.#{format}\" 2>&1`.chomp
@@ -50,7 +56,6 @@ module Docsplit
     ensure
       FileUtils.remove_entry_secure tempdir if File.exists?(tempdir)
     end
-
 
     private
 
@@ -72,6 +77,12 @@ module Docsplit
       File.expand_path(path)
     end
 
+    def ensure_directory_for(size)
+      directory_for(size).tap do |dir|
+        FileUtils.mkdir_p(dir) unless File.exists?(dir)
+      end
+    end
+
     # Generate the resize argument.
     def resize_arg(size)
       size.nil? ? '' : "-resize #{size}"
@@ -87,17 +98,48 @@ module Docsplit
     end
 
     # Generate the expanded list of requested page numbers.
-    def page_list(pages)
-      pages.split(',').map { |range|
+    def page_list(list_string = self.pages)
+      list_string.to_s.split(',').map do |range|
         if range.include?('-')
           range = range.split('-')
-          Range.new(range.first.to_i, range.last.to_i).to_a.map {|n| n.to_i }
+          Range.new(range.first.to_i, range.last.to_i).to_a.map { |n| n.to_i }
         else
           range.to_i
         end
-      }.flatten.uniq.sort
+      end.flatten.uniq.grep(Integer).sort
     end
 
+    def uses_page_ranges?(list_string = self.pages)
+      page_list(list_string).any?
+    end
+
+    def each_page_range(list_string = self.pages)
+      return enum_for(__method__, list_string) unless block_given?
+
+      list_string  = Array(list_string).join(',')
+      page_numbers = page_list(list_string)
+
+      if page_numbers.empty?
+        # 1 .. -1 means "all pages" here
+        yield(1, -1)
+      else
+        start = finish = page_numbers.first
+
+        page_numbers.each_cons(2) do |left, right|
+          next_in_seq = left + 1
+          if right <= next_in_seq
+            finish = right
+          else
+            yield(start, finish)
+            start = finish = right
+          end
+        end
+
+        yield(start, finish)
+      end
+
+      page_numbers
+    end
   end
 
 end
